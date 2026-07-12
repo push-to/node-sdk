@@ -86,6 +86,14 @@ payload directly. Paginated lists return `{ data, page, limit }`.
 `broadcasts.send()`/`broadcasts.create()` never mix `{ template, target }` in the same body — the
 SDK disambiguates the two body shapes for you.
 
+> [!WARNING]
+> **The two-`template`-fields footgun.** `broadcasts.send({ template, variables })`'s top-level
+> `template` names a **preset** (authored via `presets.create`). The unrelated, nested
+> `default.template` / `overrides[].notification.template` you pass to `broadcasts.create()` (as
+> part of a `TemplateRef`) names a **copy template** instead (authored via `pushto.templates`).
+> Same field name, different nesting level, completely disjoint schemas — don't confuse a preset
+> name for a copy-template name or vice versa.
+
 ### `pushto.contacts` — contact management
 
 | Method | Endpoint | Notes |
@@ -264,9 +272,13 @@ can link a caller to the docs without hardcoding a URL.
 
 ## Concepts
 
-See the PushTo docs for the full contact/subscription/topic/audience model — in short: a
-**contact** is a person (`external_id`), a **subscription** is one of their devices, a **topic** is
-an opt-in/opt-out preference category, and an **audience** is a named group for targeting.
+A **contact** is a person (`external_id`), a **subscription** is one of their devices/browsers, a
+**topic** is an opt-in/opt-out preference category, and an **audience** is a named group used for
+targeting. The full contact/subscription/segment/topic model — including why registration does
+**not** require an `external_id` and how a contact can outlive any single subscription — is defined
+in the PushTo core repo's
+[Contact vs Subscription](https://github.com/push-to/core/blob/main/docs/Data%20Model/Contact%20vs%20Subscription.md)
+note.
 
 ## Known deviations from the documented contract
 
