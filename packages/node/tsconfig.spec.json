@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "noEmit": true,
+    "emitDeclarationOnly": false,
+    "types": ["node", "bun"]
+  },
+  "include": ["src/**/*.test.ts"],
+  "exclude": []
+}
