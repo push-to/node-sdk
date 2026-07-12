@@ -1,6 +1,6 @@
 {
   "name": "@push-to/node",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "PushTo server-side admin SDK for Node.js — typed 1:1 wrapper over the PushTo v2 REST surface.",
   "repository": {
     "type": "git",
