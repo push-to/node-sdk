@@ -30,8 +30,11 @@ jobs:
       - run: bun install --frozen-lockfile
       - uses: nrwl/nx-set-shas@v4
 
-      # Nx Affected runs only tasks affected by the changes in this PR/commit. Learn more: https://nx.dev/ci/features/affected
-      - run: bunx nx affected -t lint typecheck build
+      # run-many, NOT affected: this is a single-package repo, and later steps
+      # (readme-check, type-contract-check) hard-depend on packages/node/dist
+      # existing — an e2e-/docs-only commit under `affected` would skip the
+      # build and fail them on a missing dist.
+      - run: bunx nx run-many -t lint typecheck build
       - run: bun run typecheck:spec
       - run: bun test
       - run: bun run readme-check
