@@ -39,3 +39,9 @@ jobs:
       - run: bun test
       - run: bun run readme-check
       - run: bun run type-contract-check
+      # T-N1-011 F2 — a node16-moduleResolution probe that resolves
+      # @push-to/node through a REAL workspace:* dependency (not a tsconfig
+      # `paths` override), so a regression in the "exports" map's
+      # require/import "types" wiring fails CI with TS1479 instead of
+      # silently shipping again.
+      - run: bun run cjs-types-probe

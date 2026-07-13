@@ -1,0 +1,9 @@
+{
+  "name": "@push-to/node-cjs-types-probe",
+  "private": true,
+  "version": "0.0.0",
+  "description": "T-N1-011 F2 — a real (not path-mapped) CommonJS consumer of @push-to/node, resolved through package.json's actual exports map via a workspace:* dependency. Absent \"type\" field ⇒ this package defaults to CommonJS, matching a strict CJS TypeScript consumer.",
+  "dependencies": {
+    "@push-to/node": "workspace:*"
+  }
+}

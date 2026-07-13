@@ -63,6 +63,7 @@ jobs:
         run: |
           bun run readme-check
           bun run type-contract-check
+          bun run cjs-types-probe
 
       - name: Release
         env:
