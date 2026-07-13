@@ -215,7 +215,9 @@ Every send response's IETF headers parse into `result.rateLimit?: { limit, remai
 `429 monthly_quota_exceeded` throws `MonthlyQuotaExceededError` carrying `retryAfter` (seconds).
 **Known limitation:** a replayed idempotent response omits the `ratelimit-*` headers, so
 `result.rateLimit` may be `undefined` on a replay — the SDK types it optional for exactly this
-reason.
+reason. The headers are also omitted entirely for a tenant with **no monthly send limit
+configured** (there is no limit to report), so a fresh tenant sees `rateLimit: undefined` on
+every call — that is not a quota-tracking bug.
 
 ## Warnings
 
