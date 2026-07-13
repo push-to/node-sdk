@@ -1,3 +1,11 @@
+## [0.1.1](https://github.com/push-to/node-sdk/compare/v0.1.0...v0.1.1) (2026-07-13)
+
+### Bug Fixes
+
+* CJS consumers hit TS1479 — exports map never routed require to d.cts ([39f9522](https://github.com/push-to/node-sdk/commit/39f95229930479fffd6769b4482808c411a77ceb))
+* stalled/mid-body reads could hang callers or escape the typed-error contract ([d422c9c](https://github.com/push-to/node-sdk/commit/d422c9cf5c63ef67fb2cf12b7f50f16077a8c14b))
+* typed malformed-envelope errors, Retry-After honored, warnings typed, parse edges ([ccced19](https://github.com/push-to/node-sdk/commit/ccced19ee8637ed367e7260c36726bd24c47410c))
+
 ## [0.1.0](https://github.com/push-to/node-sdk/compare/v0.0.0...v0.1.0) (2026-07-12)
 
 ### Features
