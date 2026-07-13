@@ -38,6 +38,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Ceiling on a server-supplied `Retry-After` hint used as a retry delay. */
+const MAX_RETRY_AFTER_DELAY_MS = 30_000;
+
 /** Capped exponential backoff with jitter. Not part of the frozen contract — a boring, typed default. */
 function backoffDelayMs(attempt: number): number {
   const base = 200 * 2 ** (attempt - 1);
@@ -102,7 +105,15 @@ export class HttpClient {
     let lastError: PushToError | undefined;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0) {
-        await sleep(backoffDelayMs(attempt));
+        // Honor a server-supplied Retry-After hint (seconds, already parsed
+        // onto the error) over the blind backoff schedule, capped so a
+        // hostile/buggy header can't park the caller for minutes.
+        const hinted = (lastError as { retryAfter?: number } | undefined)?.retryAfter;
+        const delayMs =
+          hinted !== undefined && Number.isFinite(hinted) && hinted >= 0
+            ? Math.min(hinted * 1000, MAX_RETRY_AFTER_DELAY_MS)
+            : backoffDelayMs(attempt);
+        await sleep(delayMs);
       }
 
       let error: PushToError;

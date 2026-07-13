@@ -46,6 +46,13 @@ export type PushToWarning = 'zero_recipients' | (string & {});
 export type SendResult<T> = T & {
   replayed?: boolean;
   rateLimit?: RateLimitInfo;
+  /**
+   * Non-fatal advisories from the send (Contract §5.5) — e.g.
+   * `zero_recipients` on a preset broadcast that resolved nobody. Typed on
+   * EVERY send result for forward compatibility; today only broadcast sends
+   * emit any.
+   */
+  warnings?: PushToWarning[];
 };
 
 /** One element of a `notifications.batch()` result — success or a typed per-item error. */

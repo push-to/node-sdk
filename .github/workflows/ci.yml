@@ -34,7 +34,10 @@ jobs:
       # (readme-check, type-contract-check) hard-depend on packages/node/dist
       # existing — an e2e-/docs-only commit under `affected` would skip the
       # build and fail them on a missing dist.
-      - run: bunx nx run-many -t lint typecheck build
+      # No project defines a lint target — listing it made a silent no-op leg
+      # that read as coverage. Formatting enforcement (prettier --check) is a
+      # deliberate future decision, not a fake green.
+      - run: bunx nx run-many -t typecheck build
       - run: bun run typecheck:spec
       - run: bun test
       - run: bun run readme-check

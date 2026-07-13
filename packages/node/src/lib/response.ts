@@ -94,12 +94,20 @@ function statusForErrorName(name: string): number {
   return STATUS_BY_ERROR_NAME[name] ?? 500;
 }
 
-/** Parses `Retry-After` (seconds) — carried on `429` responses (Contract §5.2). */
+/**
+ * Parses `Retry-After` — carried on `429` responses (Contract §5.2). Handles
+ * both RFC 7231 forms: delta-seconds and HTTP-date (converted to a
+ * non-negative delta from now). An empty/garbage header yields `undefined`
+ * (`Number('')` is `0`, which would otherwise read as "retry immediately").
+ */
 function parseRetryAfter(headers: Headers): number | undefined {
   const raw = headers.get('retry-after');
-  if (raw === null) return undefined;
-  const value = Number(raw);
-  return Number.isNaN(value) ? undefined : value;
+  if (raw === null || raw.trim() === '') return undefined;
+  const seconds = Number(raw);
+  if (!Number.isNaN(seconds)) return seconds >= 0 ? seconds : undefined;
+  const dateMs = Date.parse(raw);
+  if (Number.isNaN(dateMs)) return undefined;
+  return Math.max(0, Math.ceil((dateMs - Date.now()) / 1000));
 }
 
 /**
@@ -184,8 +192,21 @@ export function parseReplayed(headers: Headers): boolean | undefined {
   return headers.get('idempotency-replayed') === 'true' ? true : undefined;
 }
 
-/** Unwraps a plain `{ data }` success envelope. */
+/**
+ * Unwraps a plain `{ data }` success envelope. A 2xx whose body is empty,
+ * non-JSON (`parseJsonSafely` → `null` — e.g. an intermediary's HTML
+ * maintenance page), or missing `data` throws a typed `PushToError` —
+ * never a raw `TypeError` — preserving errors.ts's contract that every
+ * rejection is a `PushToError`.
+ */
 export function unwrapData<T>(json: unknown): T {
+  if (json === null || typeof json !== 'object' || !('data' in json)) {
+    throw new PushToError(
+      'malformed_response',
+      'The server returned a success status but the body was not a { data } envelope — an intermediary (proxy/CDN) may have replaced the response.',
+      { statusCode: 200 },
+    );
+  }
   return (json as { data: T }).data;
 }
 
