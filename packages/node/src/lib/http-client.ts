@@ -129,32 +129,70 @@ export class HttpClient {
     url: string,
     options: RequestOptions,
   ): Promise<RawResponse<T>> {
+    // F1 fix (T-N1-011): the SAME AbortController/timeout must guard the
+    // ENTIRE attempt — connect+headers AND the body-read that follows —
+    // not just the initial fetch() call. `clearTimeout` used to run in a
+    // `finally` attached only to the fetch() try/catch, so a response
+    // whose HEADERS arrived (fetch() resolves) but whose BODY then stalled
+    // (a slow/wedged connection) hung `response.text()` forever with no
+    // timeout protection at all: the caller's promise never settled.
+    // Holding the controller/timeout open across `parseJsonSafely` too
+    // means a stalled body read gets aborted by the same deadline, and
+    // fetch's Fetch-spec-mandated behavior rejects the in-flight body read
+    // with the same AbortError the initial connect phase would produce.
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    let response: Response;
     try {
-      response = await this.fetchImpl(url, {
-        method,
-        headers: this.buildHeaders(options),
-        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-        signal: controller.signal,
-      });
-    } catch (cause) {
-      throw classifyNetworkError(cause);
+      let response: Response;
+      try {
+        response = await this.fetchImpl(url, {
+          method,
+          headers: this.buildHeaders(options),
+          body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+          signal: controller.signal,
+        });
+      } catch (cause) {
+        throw classifyNetworkError(cause);
+      }
+
+      // F3 fix (T-N1-011): a failure while READING the body (connection
+      // reset mid-stream, the abort above firing during the read, a
+      // decode error) used to propagate as a raw, unwrapped exception —
+      // escaping both the "every method rejects with a typed PushToError"
+      // contract AND the retry loop (`isRetryableError` only recognizes
+      // `PushToError` instances, so a raw error silently disabled retry
+      // even when the call was idempotent+keyed+retryable).
+      let json: unknown;
+      try {
+        json = await parseJsonSafely(response);
+      } catch (cause) {
+        throw classifyNetworkError(cause);
+      }
+
+      if (!response.ok) {
+        throw classifyError(response.status, json, response.headers);
+      }
+      return { json: json as T, headers: response.headers, status: response.status };
     } finally {
       clearTimeout(timeout);
     }
-
-    const json = await parseJsonSafely(response);
-    if (!response.ok) {
-      throw classifyError(response.status, json, response.headers);
-    }
-    return { json: json as T, headers: response.headers, status: response.status };
   }
 
   private buildUrl(path: string, query?: RequestOptions['query']): string {
-    const url = new URL(path, this.baseUrl);
+    // Bonus fix (found during T-N1-011's audit, not one of the ten named
+    // findings): a leading-slash `path` resolved against a `baseUrl` that
+    // itself has a sub-path (e.g. a self-hosted proxy at
+    // "https://gw.example.com/pushto") silently DROPPED that sub-path —
+    // WHATWG URL resolution treats a leading "/" as absolute-path,
+    // replacing the base's entire path rather than appending to it.
+    // Stripping the path's leading slash and ensuring the base ends in
+    // "/" makes this a proper relative-append for every baseUrl shape,
+    // while leaving the documented default (`https://api.pushto.ai`, no
+    // sub-path) unaffected.
+    const normalizedBase = this.baseUrl.endsWith('/') ? this.baseUrl : `${this.baseUrl}/`;
+    const normalizedPath = path.startsWith('/') ? path.slice(1) : path;
+    const url = new URL(normalizedPath, normalizedBase);
     if (query) {
       for (const [key, value] of Object.entries(query)) {
         if (value !== undefined) {

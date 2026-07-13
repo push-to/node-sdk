@@ -260,6 +260,129 @@ describe('HttpClient — error classification', () => {
 
     expect(err).toBeInstanceOf(GatewayTimeoutError);
   });
+
+  // F1 (T-N1-011) — a stalled response BODY (headers arrived, then the
+  // connection wedges) must not hang the caller forever. The mock ties its
+  // never-otherwise-resolving `.text()` to the SAME AbortSignal the client
+  // passed to fetch() — exactly how a real fetch/undici body read behaves —
+  // so this only completes if the client's own timeoutMs aborts it.
+  test('a stalled response body times out instead of hanging forever', async () => {
+    const fetchMock = (async (_url: string, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal;
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: () =>
+          new Promise<string>((_resolve, reject) => {
+            signal.addEventListener('abort', () => {
+              const err = new Error('The operation was aborted.');
+              err.name = 'AbortError';
+              reject(err);
+            });
+          }),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const client = new HttpClient('sk_test', {
+      baseUrl: 'https://core.test',
+      fetch: fetchMock,
+      timeoutMs: 25,
+    });
+
+    const start = Date.now();
+    const err = await client.request('GET', '/v2/topics').catch((e) => e);
+    const elapsed = Date.now() - start;
+
+    expect(err).toBeInstanceOf(GatewayTimeoutError);
+    // Bounded well below bun's default test timeout — proves it didn't hang.
+    expect(elapsed).toBeLessThan(1_000);
+  });
+
+  // F3 (T-N1-011) — a failure while READING the body (connection reset
+  // mid-stream, a decode error) must still reject as a typed PushToError,
+  // never the raw underlying exception.
+  test('a mid-body read failure rejects as a typed PushToError, not the raw exception', async () => {
+    const bodyBoom = new Error('terminated');
+    const fetchMock = (async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: () => Promise.reject(bodyBoom),
+    })) as unknown as typeof fetch;
+
+    const client = new HttpClient('sk_test', { baseUrl: 'https://core.test', fetch: fetchMock });
+    const err = (await client.request('GET', '/v2/topics').catch((e) => e)) as PushToError;
+
+    expect(err).toBeInstanceOf(PushToError);
+    expect(err).not.toBe(bodyBoom);
+    expect(err.cause).toBe(bodyBoom);
+  });
+
+  // F3 (T-N1-011) — and, being a classified PushToError with no statusCode,
+  // it must re-enter the SAME retry gate a network/timeout failure does.
+  test('a mid-body read failure is retried when the call is retryable + keyed', async () => {
+    let calls = 0;
+    const fetchMock = (async () => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          text: () => Promise.reject(new Error('terminated')),
+        } as unknown as Response;
+      }
+      return jsonResponse(200, { data: { id: 1 } });
+    }) as unknown as typeof fetch;
+
+    const client = new HttpClient('sk_test', {
+      baseUrl: 'https://core.test',
+      fetch: fetchMock,
+      maxRetries: 2,
+    });
+    const result = await client.request<{ data: { id: number } }>('POST', '/v2/notifications', {
+      idempotencyKey: 'k',
+      retryable: true,
+    });
+
+    expect(calls).toBe(2);
+    expect(result.json.data.id).toBe(1);
+  });
+});
+
+describe('HttpClient — baseUrl with a sub-path (bonus fix, found during T-N1-011 audit)', () => {
+  test('preserves the sub-path when joining a leading-slash request path', async () => {
+    let capturedUrl = '';
+    const fetchMock = (async (url: string) => {
+      capturedUrl = url;
+      return jsonResponse(200, { data: {} });
+    }) as unknown as typeof fetch;
+
+    const client = new HttpClient('sk_test', {
+      baseUrl: 'https://gw.example.com/pushto',
+      fetch: fetchMock,
+    });
+    await client.request('GET', '/v2/topics');
+
+    expect(capturedUrl).toBe('https://gw.example.com/pushto/v2/topics');
+  });
+
+  test('is idempotent whether or not the caller-supplied baseUrl already ends in "/"', async () => {
+    let capturedUrl = '';
+    const fetchMock = (async (url: string) => {
+      capturedUrl = url;
+      return jsonResponse(200, { data: {} });
+    }) as unknown as typeof fetch;
+
+    const client = new HttpClient('sk_test', {
+      baseUrl: 'https://gw.example.com/pushto/',
+      fetch: fetchMock,
+    });
+    await client.request('GET', '/v2/topics');
+
+    expect(capturedUrl).toBe('https://gw.example.com/pushto/v2/topics');
+  });
 });
 
 describe('HttpClient — rate limit + idempotency-replayed headers', () => {
