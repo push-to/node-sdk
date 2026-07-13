@@ -1,3 +1,9 @@
+## [0.1.2](https://github.com/push-to/node-sdk/compare/v0.1.1...v0.1.2) (2026-07-13)
+
+### Documentation
+
+* README — rateLimit is also undefined for tenants with no monthly send limit ([3ecf48b](https://github.com/push-to/node-sdk/commit/3ecf48b921e45ac948ae23ad855442ed263944b9))
+
 ## [0.1.1](https://github.com/push-to/node-sdk/compare/v0.1.0...v0.1.1) (2026-07-13)
 
 ### Bug Fixes
